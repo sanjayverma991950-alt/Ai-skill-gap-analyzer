@@ -15,7 +15,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS for frontend client
+// Enable CORS
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -24,52 +24,97 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g., mobile apps, curl)
+    // Allow requests without origin
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    return callback(null, true); // Dev-friendly permissive CORS
+
+    // Temporarily allow all origins
+    return callback(null, true);
   },
   credentials: true
 }));
 
+// Middleware
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
-// Health Check
+
+// ========================================
+// HOME ROUTE
+// ========================================
+
+app.get('/', (req, res) => {
+  res.send('AI Skill Gap Analyzer Backend is Running 🚀');
+});
+
+
+// ========================================
+// HEALTH CHECK ROUTE
+// ========================================
+
 app.get('/api/health', (req, res) => {
   const db = getDbStatus();
+
   res.json({
     status: 'online',
     timestamp: new Date().toISOString(),
     database: db.type,
     connected: db.connected,
-    aiConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here')
+    aiConfigured: Boolean(
+      process.env.GEMINI_API_KEY &&
+      process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here'
+    )
   });
 });
 
-// Mount Routes
+
+// ========================================
+// API ROUTES
+// ========================================
+
 app.use('/api/auth', authRoutes);
 app.use('/api/analyzer', analyzerRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/roadmaps', roadmapRoutes);
 
-// Error Middlewares
+
+// ========================================
+// ERROR MIDDLEWARE
+// ========================================
+
 app.use(notFound);
 app.use(errorHandler);
 
-// Initialize server and database
-const startServer = async () => {
-  const isDbConnected = await connectDB();
-  if (isDbConnected) {
-    await seedDatabase();
-  }
 
-  app.listen(PORT, () => {
-    console.log(`🚀 AI Skill Gap Analyzer Server running on http://localhost:${PORT}`);
-    console.log(`📡 Storage Mode: ${getDbStatus().type}`);
-    console.log(`🧠 AI Engine: ${process.env.GEMINI_API_KEY ? 'Gemini Enabled' : 'Heuristic Mode (Add GEMINI_API_KEY to enable LLM)'}`);
-  });
+// ========================================
+// START SERVER
+// ========================================
+
+const startServer = async () => {
+  try {
+    const isDbConnected = await connectDB();
+
+    if (isDbConnected) {
+      await seedDatabase();
+    }
+
+    app.listen(PORT, () => {
+      console.log(`🚀 AI Skill Gap Analyzer Server running on port ${PORT}`);
+      console.log(`📡 Storage Mode: ${getDbStatus().type}`);
+      console.log(
+        `🧠 AI Engine: ${
+          process.env.GEMINI_API_KEY
+            ? 'Gemini Enabled'
+            : 'Heuristic Mode (Add GEMINI_API_KEY to enable LLM)'
+        }`
+      );
+    });
+
+  } catch (error) {
+    console.error('❌ Server startup error:', error);
+    process.exit(1);
+  }
 };
 
 startServer();
