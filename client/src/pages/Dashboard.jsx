@@ -270,7 +270,11 @@ const Dashboard = () => {
                     {role.marketDemand} Demand
                   </span>
                   <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    ${(role.salaryRange.min / 1000).toFixed(0)}k - ${(role.salaryRange.max / 1000).toFixed(0)}k
+                    {role.salaryRange?.min ? (
+                      `$${(role.salaryRange.min / 1000).toFixed(0)}k - $${(role.salaryRange.max / 1000).toFixed(0)}k`
+                    ) : (
+                      'Competitive'
+                    )}
                   </span>
                 </div>
 

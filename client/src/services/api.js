@@ -1,7 +1,16 @@
 import axios from 'axios';
 
+const getBaseURL = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.trim() !== '') {
+    const cleaned = envUrl.trim().replace(/\/+$/, '');
+    return cleaned.endsWith('/api') ? cleaned : `${cleaned}/api`;
+  }
+  return '/api';
+};
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: getBaseURL(),
 });
 
 // Interceptor to attach Authorization Bearer token from localStorage
@@ -25,10 +34,7 @@ export const authAPI = {
 
 export const analyzerAPI = {
   scanResume: (formData, onUploadProgress) => {
-    // Check if formData is FormData object or JSON
-    const isFormData = formData instanceof FormData;
     return api.post('/analyzer/scan', formData, {
-      headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : {},
       onUploadProgress
     });
   },

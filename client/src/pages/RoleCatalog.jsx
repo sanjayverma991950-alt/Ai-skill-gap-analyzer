@@ -123,7 +123,9 @@ const RoleCatalog = () => {
                   </span>
                   <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center">
                     <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
-                    {(role.salaryRange?.min / 1000).toFixed(0)}k - {(role.salaryRange?.max / 1000).toFixed(0)}k / yr
+                    {role.salaryRange?.min
+                      ? `${(role.salaryRange.min / 1000).toFixed(0)}k - ${(role.salaryRange.max / 1000).toFixed(0)}k / yr`
+                      : 'Competitive'}
                   </span>
                 </div>
 
