@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { extractTextFromFile, extractCandidateBasicInfo } from '../services/resumeParserService.js';
 import { runSkillGapAnalysis } from '../services/aiService.js';
 import { Analysis } from '../models/Analysis.js';
@@ -42,8 +43,36 @@ export const analyzeResume = async (req, res) => {
       candidateInfo
     });
 
-    const userId = req.user ? req.user._id : null;
+    const rawUserId = req.user ? req.user._id : null;
+    const isValidMongoUser = rawUserId && mongoose.Types.ObjectId.isValid(rawUserId);
+    const userId = isValidMongoUser ? rawUserId : null;
     const isConnected = getDbStatus().connected;
+
+    // Sanitize skill gaps to adhere cleanly to schema enums
+    const validStatuses = ['Strong Match', 'Needs Improvement', 'Missing Critical'];
+    const validPriorities = ['High', 'Medium', 'Low'];
+    const sanitizedSkillGaps = (analysisResult.skillGaps || []).map(sg => {
+      let status = sg.status;
+      if (!validStatuses.includes(status)) {
+        if (/match|strong|proficient/i.test(status)) status = 'Strong Match';
+        else if (/missing|critical|deficit/i.test(status)) status = 'Missing Critical';
+        else status = 'Needs Improvement';
+      }
+      let learningPriority = sg.learningPriority;
+      if (!validPriorities.includes(learningPriority)) {
+        if (/high/i.test(learningPriority)) learningPriority = 'High';
+        else if (/low/i.test(learningPriority)) learningPriority = 'Low';
+        else learningPriority = 'Medium';
+      }
+      return {
+        ...sg,
+        status,
+        learningPriority,
+        currentProficiency: Number(sg.currentProficiency) || 0,
+        requiredProficiency: Number(sg.requiredProficiency) || 80,
+        gapScore: Number(sg.gapScore) || 0
+      };
+    });
 
     let savedAnalysis = null;
     let savedRoadmap = null;
@@ -55,14 +84,14 @@ export const analyzeResume = async (req, res) => {
         candidateName: analysisResult.candidateName,
         targetRole: analysisResult.targetRole,
         jobDescriptionProvided: Boolean(customJobDescription),
-        overallMatchScore: analysisResult.overallMatchScore,
+        overallMatchScore: Number(analysisResult.overallMatchScore) || 50,
         summary: analysisResult.summary,
-        strengths: analysisResult.strengths,
-        keyGaps: analysisResult.keyGaps,
-        radarData: analysisResult.radarData,
-        skillGaps: analysisResult.skillGaps,
-        extractedSkills: analysisResult.extractedSkills,
-        recommendations: analysisResult.recommendations,
+        strengths: analysisResult.strengths || [],
+        keyGaps: analysisResult.keyGaps || [],
+        radarData: analysisResult.radarData || [],
+        skillGaps: sanitizedSkillGaps,
+        extractedSkills: analysisResult.extractedSkills || [],
+        recommendations: analysisResult.recommendations || [],
         aiProviderUsed: analysisResult.aiProviderUsed
       });
 
@@ -73,7 +102,7 @@ export const analyzeResume = async (req, res) => {
           targetRole: analysisResult.targetRole,
           candidateName: analysisResult.candidateName,
           totalDurationWeeks: analysisResult.roadmap.totalDurationWeeks || 8,
-          phases: analysisResult.roadmap.phases,
+          phases: analysisResult.roadmap.phases || [],
           overallProgressPercentage: 0
         });
       }
@@ -82,8 +111,9 @@ export const analyzeResume = async (req, res) => {
       const analysisId = `mem_analysis_${Date.now()}`;
       savedAnalysis = {
         _id: analysisId,
-        userId,
+        userId: rawUserId,
         ...analysisResult,
+        skillGaps: sanitizedSkillGaps,
         createdAt: new Date()
       };
       mockStore.analyses.unshift(savedAnalysis);
@@ -92,7 +122,7 @@ export const analyzeResume = async (req, res) => {
         const roadmapId = `mem_roadmap_${Date.now()}`;
         savedRoadmap = {
           _id: roadmapId,
-          userId,
+          userId: rawUserId,
           analysisId,
           ...analysisResult.roadmap,
           createdAt: new Date()
@@ -129,16 +159,17 @@ export const analyzeResume = async (req, res) => {
 export const getAnalysisHistory = async (req, res) => {
   try {
     const isConnected = getDbStatus().connected;
-    const userId = req.user._id;
+    const rawUserId = req.user ? req.user._id : null;
+    const isValidMongoUser = rawUserId && mongoose.Types.ObjectId.isValid(rawUserId);
 
-    if (isConnected) {
-      const history = await Analysis.find({ userId })
+    if (isConnected && isValidMongoUser) {
+      const history = await Analysis.find({ userId: rawUserId })
         .sort({ createdAt: -1 })
         .select('candidateName targetRole overallMatchScore summary createdAt aiProviderUsed');
       return res.json({ success: true, count: history.length, data: history });
     } else {
       const history = mockStore.analyses
-        .filter(a => String(a.userId) === String(userId))
+        .filter(a => String(a.userId) === String(rawUserId))
         .map(({ _id, candidateName, targetRole, overallMatchScore, summary, createdAt, aiProviderUsed }) => ({
           _id, candidateName, targetRole, overallMatchScore, summary, createdAt, aiProviderUsed
         }));
@@ -161,7 +192,7 @@ export const getAnalysisById = async (req, res) => {
     let analysis = null;
     let roadmap = null;
 
-    if (isConnected) {
+    if (isConnected && mongoose.Types.ObjectId.isValid(id)) {
       analysis = await Analysis.findById(id);
       if (analysis) {
         roadmap = await Roadmap.findOne({ analysisId: analysis._id });
@@ -169,7 +200,7 @@ export const getAnalysisById = async (req, res) => {
     } else {
       analysis = mockStore.analyses.find(a => String(a._id) === String(id));
       if (analysis) {
-        roadmap = mockStore.roadmaps.find(r => String(r.analysisId) === String(id));
+        roadmap = mockStore.roadmaps.find(r => String(r.analysisId) === String(id) || String(r._id) === String(id));
       }
     }
 

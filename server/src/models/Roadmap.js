@@ -6,7 +6,7 @@ const milestoneItemSchema = new mongoose.Schema({
   estimatedHours: Number,
   resources: [{
     title: String,
-    type: { type: String, enum: ['Article', 'Course', 'Video', 'Documentation', 'Book', 'Project'], default: 'Course' },
+    type: { type: String, default: 'Course' },
     url: String,
     isFree: { type: Boolean, default: true }
   }],

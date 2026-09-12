@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Roadmap } from '../models/Roadmap.js';
 import { getDbStatus } from '../config/db.js';
 import { mockStore } from '../config/inMemoryStore.js';
@@ -12,7 +13,7 @@ export const getRoadmapById = async (req, res) => {
     const isConnected = getDbStatus().connected;
 
     let roadmap = null;
-    if (isConnected) {
+    if (isConnected && mongoose.Types.ObjectId.isValid(id)) {
       roadmap = await Roadmap.findById(id);
     } else {
       roadmap = mockStore.roadmaps.find(r => String(r._id) === String(id));
@@ -35,13 +36,14 @@ export const getRoadmapById = async (req, res) => {
 export const getUserRoadmaps = async (req, res) => {
   try {
     const isConnected = getDbStatus().connected;
-    const userId = req.user._id;
+    const rawUserId = req.user ? req.user._id : null;
+    const isValidMongoUser = rawUserId && mongoose.Types.ObjectId.isValid(rawUserId);
 
-    if (isConnected) {
-      const roadmaps = await Roadmap.find({ userId }).sort({ createdAt: -1 });
+    if (isConnected && isValidMongoUser) {
+      const roadmaps = await Roadmap.find({ userId: rawUserId }).sort({ createdAt: -1 });
       return res.json({ success: true, count: roadmaps.length, data: roadmaps });
     } else {
-      const roadmaps = mockStore.roadmaps.filter(r => String(r.userId) === String(userId));
+      const roadmaps = mockStore.roadmaps.filter(r => String(r.userId) === String(rawUserId));
       return res.json({ success: true, count: roadmaps.length, data: roadmaps });
     }
   } catch (error) {
@@ -62,7 +64,7 @@ export const toggleMilestone = async (req, res) => {
 
     let roadmap = null;
 
-    if (isConnected) {
+    if (isConnected && mongoose.Types.ObjectId.isValid(id)) {
       roadmap = await Roadmap.findById(id);
       if (!roadmap) {
         return res.status(404).json({ success: false, message: 'Roadmap not found' });
